@@ -128,7 +128,7 @@ class Monkey:
 class MonkeyGIT (GitProject):
     def __init__(self, home_path):
         self._home = home_path
-        https_repo = 'https://github.com/monkey/monkey.git'
+        https_repo = 'https://github.com/mr-mop/monkey.git'
         git_repo   = 'git@github.com:monkey/monkey.git'
         GitProject.__init__(self, 'Monkey', https_repo, git_repo)
 
@@ -138,7 +138,7 @@ class MonkeyGIT (GitProject):
 class DudaGIT(GitProject):
     def __init__(self, home_path):
         self._home = home_path
-        https_repo = 'https://github.com/monkey/duda.git'
+        https_repo = 'https://github.com/mr-mop/duda.git'
         git_repo   = 'git@github.com:monkey/duda.git'
         GitProject.__init__(self, 'Duda', https_repo, git_repo)
 
