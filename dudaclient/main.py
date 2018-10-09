@@ -59,7 +59,7 @@ class Monkey:
 
     def __init__(self, source_path):
         self.mk_path = source_path
-        self.SSL = False
+        self.TLS = False
 
     def configure(self):
         if self.recent_configure is True:
@@ -71,11 +71,11 @@ class Monkey:
         # Specify the plugins
         plugins = "liana,duda,auth"
 
-                # If we have SSL enable, we have to replace the transport layer, that means
-        # disable Liana and enable the new PolarSSL, later we need to generate
+                # If we have TLS enable, we have to replace the transport layer, that means
+        # disable Liana and enable the new mbedTLS, later we need to generate
         # certificates and configure everything to make it work properly
-        if self.SSL is True:
-            plugins += ',polarssl'
+        if self.TLS is True:
+            plugins += ',tls'
 
         configure = "./configure --debug --disable-plugins='*' --enable-plugins='%s' %s"  % (plugins, self.opts)
 
@@ -113,7 +113,7 @@ class Monkey:
     def update_transport_layer(self, t='plain'):
         if t == 'plain':
             pass
-        elif t == 'SSL':
+        elif t == 'TLS':
             pass
 
     def version(self):
@@ -171,11 +171,12 @@ class Duda:
         self.web_service = None
         self.service = None
         self.port = 2001
-        self.SSL = False
-        self.SSL_default = False
+        self.TLS = False
+        self.TLS_default = False
         self.output_stdout = False
         self.api_level = DEFAULT_API_LEVEL
         self.linux_malloc = False
+        self.trace = False
         self.linux_trace = False
         self.jemalloc_stats = False
         self.jemalloc_prof  = False
@@ -361,10 +362,10 @@ class Duda:
         else:
             self.rebuild_monkey = True
 
-        # Check if SSL is required and the Stack was built with SSL on it
-        if self.monkey.SSL is True:
-            polarssl = self.dudac_stage_path + '/monkey/plugins/polarssl/monkey-polarssl.so'
-            if not os.path.isfile(polarssl):
+        # Check if TLS is required and the Stack was built with TLS on it
+        if self.monkey.TLS is True:
+            mbedtls = self.dudac_stage_path + '/monkey/plugins/tls/monkey-tls.so'
+            if not os.path.isfile(mbedtls):
                 self.rebuild_monkey = True
 
         if self.rebuild_monkey is True:
@@ -519,8 +520,8 @@ class Duda:
         self.enable_plugin(monkey_stage, 'duda')
         self.enable_plugin(monkey_stage, 'auth')
 
-        if self.monkey.SSL is True:
-            self.enable_plugin(monkey_stage, 'polarssl')
+        if self.monkey.TLS is True:
+            self.enable_plugin(monkey_stage, 'tls')
 
         # Setting up Duda plugin configuration
         duda = monkey_stage + "/conf/plugins/duda/duda.conf"
@@ -561,14 +562,14 @@ class Duda:
             if line.startswith("    User"):
                 raw += "    # User  Inactivated by DudaC\n"
             elif line.startswith("    TransportLayer"):
-                if self.SSL is True:
-                    raw += "    TransportLayer polarssl\n"
-                    self.SSL_default = True
+                if self.TLS is True:
+                    raw += "    TransportLayer tls\n"
+                    self.TLS_default = True
                 else:
                     raw += "    TransportLayer liana\n"
-                    self.SSL_default = False
-            elif line.startswith("    TransportLayer") and line.find('polarssl') > 0:
-                self.SSL_default = True
+                    self.TLS_default = False
+            elif line.startswith("    TransportLayer") and line.find('tls') > 0:
+                self.TLS_default = True
                 raw += line
             else:
                 raw += line
@@ -639,20 +640,20 @@ class Duda:
             f.write(raw)
             f.close()
 
-        # Configure Transport Layer for SSL
-        if self.SSL_default is True:
-            self.SSL_configure(monkey_stage)
+        # Configure Transport Layer for TLS
+        if self.TLS_default is True:
+            self.TLS_configure(monkey_stage)
 
 
         http = monkey_stage + "bin/monkey"
 
-        if self.SSL is True:
-            http += " --transport polarssl"
+        if self.TLS is True:
+            http += " --transport tls"
         else:
             http += " --transport liana"
 
         try:
-            if self.SSL_default is True:
+            if self.TLS_default is True:
                 prot = "https"
             else:
                 prot = "http"
@@ -681,7 +682,7 @@ class Duda:
             print "\nDone!"
             raise
 
-    def SSL_configure(self, monkey_stage):
+    def TLS_configure(self, monkey_stage):
         plgs = monkey_stage + "/conf/plugins.load"
         f = open(plgs, "r")
         lines = f.readlines()
@@ -689,7 +690,7 @@ class Duda:
 
         raw = ""
         for line in lines:
-            if line.find('monkey-polarssl') > 0 and self.SSL is True:
+            if line.find('monkey-tls') > 0 and self.TLS is True:
                 raw += line.replace("# Load", "Load")
             else:
                 raw += line
@@ -698,8 +699,8 @@ class Duda:
         f.write(raw)
         f.close()
 
-        # Check if SSL certificates exists
-        sslconf = monkey_stage + "/conf/plugins/polarssl/polarssl.conf"
+        # Check if TLS certificates exists
+        sslconf = monkey_stage + "/conf/plugins/tls/tls.conf"
         f = open(sslconf, "r")
         lines = f.readlines()
         f.close()
@@ -723,31 +724,31 @@ class Duda:
                     dh_param_file = val
 
         # Generate Certificates if they dont exists
-        p = monkey_stage + "/conf/plugins/polarssl/"
+        p = monkey_stage + "/conf/plugins/tls/"
         if rsa_key_file is None:
             cmd = "openssl genrsa -out " + p + "rsa_key.pem 1024"
-            execute("SSL: Generate RSA", cmd)
+            execute("TLS: Generate RSA", cmd)
             rsa_key_file = p + "rsa_key.pem"
         else:
-            print_msg("SSL         : RSA (cached)", True)
+            print_msg("TLS         : RSA (cached)", True)
 
         if certificate_file is None:
             cmd = "openssl req -new -x509 -key " + rsa_key_file + \
                 " -out " + p + "srv_cert.pem" + " -days 1095 -subj '/C=US'"
-            execute("SSL: Generate Certificate", cmd)
+            execute("TLS: Generate Certificate", cmd)
             certificate_file = p + "srv_cert.pem"
         else:
-            print_msg("SSL         : Cert (cached)", True)
+            print_msg("TLS         : Cert (cached)", True)
 
         if dh_param_file is None:
             cmd = "openssl dhparam -out " + p + "dhparam.pem 1024"
-            execute("SSL: Generate DH Params", cmd)
+            execute("TLS: Generate DH Params", cmd)
             dh_param_file = p + "dhparam.pem"
         else:
-            print_msg("SSL         : DH Params (cached)", True)
+            print_msg("TLS         : DH Params (cached)", True)
 
-        # Create new config and override polarssl.conf file
-        raw  = "[SSL]\n"
+        # Create new config and override tls.conf file
+        raw  = "[TLS]\n"
         raw += "    CertificateFile " + certificate_file + "\n"
         raw += "    RSAKeyFile      " + rsa_key_file + "\n"
         raw += "    DHParameterFile " + dh_param_file + "\n\n"
@@ -793,7 +794,7 @@ class Duda:
         print ANSI_BOLD + ANSI_WHITE + "HTTP Server Options" + ANSI_RESET
         print "  -p TCP_PORT\t\tSet TCP port (default 2001)"
         print "  -w WEB_SERVICE\tSpecify web service source path"
-        print "  -S\t\t\tWeb Service will run with SSL mode enabled"
+        print "  -S\t\t\tWeb Service will run with TLS mode enabled"
         print "  -M 'k1=v1,kn=vn'\tOverride some web server config key/value"
 
         print
@@ -844,7 +845,7 @@ class Duda:
 
         # Reading command line arguments
         try:
-            optlist, args = getopt.getopt(sys.argv[1:], 'DV:sgFrRhvSuw:p:AXJTM:')
+            optlist, args = getopt.getopt(sys.argv[1:], 'DV:sgFrRhvSuw:p:AXJtTM:')
         except getopt.GetoptError:
             self.print_help()
             sys.exit(2)
@@ -870,7 +871,7 @@ class Duda:
             elif op == '-V':
                 self.api_level = arg
             elif op == '-S':
-                self.SSL = True
+                self.TLS = True
             elif op == '-p':
                 if not str(arg).isdigit():
                     self.print_help()
@@ -886,6 +887,8 @@ class Duda:
                 monkey_conf = arg
             elif op == '-D':
                 self.service_macros = arg
+            elif op == '-t':
+                self.trace = True
             elif op == '-T':
                 self.linux_trace = True
             elif op == '-u':
@@ -911,9 +914,9 @@ class Duda:
             self.reset()
             sys.exit(0)
 
-        # SSL
-        if self.SSL is True:
-            self.monkey.SSL = True
+        # TLS
+        if self.TLS is True:
+            self.monkey.TLS = True
 
         # Enable Jemalloc profiling
         if 'JEMALLOC_OPTS' not in os.environ:
@@ -925,6 +928,10 @@ class Duda:
 
         # More environment vars: make will use 8 jobs
         os.environ['MAKEFLAGS'] = '-j 8'
+
+        # Monkey Trace
+        if self.trace is True:
+            self.monkey.opts += "--trace "
 
         # Linux Trace Toolkit
         if self.linux_trace is True:
